@@ -23,6 +23,15 @@
         </style>
     </head>
     <body>
+        <?php $selector_warehouse = '<select>
+                                <option>Грация</option>
+                                <option>Каб. 4</option>
+                                <option>О. Вершинина</option>
+                                <option>Поющие руки</option>
+                            </select>';
+        ?>
+        
+        <!-- Навигационная панель (заголовки сверху) -->
         <nav class="nav db-nav">
             <a class="nav-link div-link" href="#">Костюмы</a>
             <a class="nav-link div-link" href="#">Сувениры</a>
@@ -32,13 +41,12 @@
             </span>
         </nav>
         
-        <?php $selector_warehouse = '<select class="select-style">
-                                <option>Грация</option>
-                                <option>Каб. 4</option>
-                                <option>О. Вершинина</option>
-                                <option>Поющие руки</option>
-                            </select>';
-        ?>
+        <form class="d-flex search-table" role="search" method="POST" action="" id="search-form">
+            <input class="form-control me-2" type="search" placeholder="Поиск" name="q"
+                   aria-label="Search" id="search-input">
+            <button class="btn btn-outline-success" type="submit">Поиск</button>
+            <div id="search-results-container"></div>
+        </form>
         
         <div id="table-costumes">
             <table class="data-table">
@@ -55,29 +63,39 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <?php
+                    <?php // Чтение .csv файла с данными по костюмам
                         $row = 1;
-                        if (($handle = fopen("C:\Users\kuksh\Desktop\Практика\Пример таблицы костюмов.csv", "r")) !== FALSE) {
+                        $header_types = Array();
+                        if (($handle = fopen("db/Пример таблицы костюмов.csv", "r")) !== FALSE) {
                             while (($data = fgetcsv($handle, 1000, ";")) !== FALSE) {
                                 echo "<tr dataset-id='" . $data[0] ."'>";
                                 $num = count($data);
-                                if ($row++ > 2) {
+                                if ($row > 1) {
                                     for ($c=0; $c < $num; $c++) {
-                                    if ($c !== 0) {
-                                        if ($c === 2) {
-                                            echo "<td><img width='100' height='100'"
-                                            . " src='static/img/" . $data[$c] .
-                                                    "' alt='" . $data[$c] ."'></td>";
+                                        // Если строка вторая, то это типы столбцов
+                                        // Считываем их в отдельный список и пропускаем цикл
+                                        if ($row === 2) {
+                                            $header_types = array_slice($data, offset: 1);
+                                            break;
                                         }
-                                        else {
-                                            echo "<td>" . htmlspecialchars($data[$c]) . "</td>";
+                                        if ($c !== 0) { // Если не id
+                                            if ($c === 2) { // Если картинка
+                                                // Рисуем картинку в таблице размером 100*100
+                                                echo "<td><img width='100' height='100'"
+                                                . " src='static/img/" . $data[$c] .
+                                                        "' alt='" . $data[$c] ."'></td>";
+                                            }
+                                            else {
+                                                // иначе выводим текстовое содержимое
+                                                echo "<td>" . htmlspecialchars($data[$c]) . "</td>";
+                                            }
                                         }
-                                    }
                                     }
                                     echo "</tr>";
                                 }
+                                $row++;  // Переходим на следующую строку
                             }
-                            fclose($handle);
+                            fclose($handle);  // закрытие файла
                         }
                     ?>
                 </tbody>
@@ -97,27 +115,66 @@
         const table = document.querySelector('.data-table');
         const rows = table.getElementsByTagName('tr');
         const headers = table.getElementsByTagName('th');
+        const headerTypes = <?php echo json_encode($header_types, JSON_UNESCAPED_UNICODE); ?>;
         const infoBox = document.getElementById('info-box'); // исправлен ID
+        
+        // Кнопки сохранения и удаления предмета в отедльном окне
+        const infoBoxButtons = '<div class="d-flex justify-content-end">\
+                                <button type="button" class="btn btn-primary table-info-btn">Сохранить</button>\n\
+                                <button type="button" class="btn btn-danger table-info-btn">Удалить</button>\n\
+                                </div>';
+;
 
+        // Для каждой строки таблицы, кроме первой добавяем событие клика,
+        // которое показывает информацию по предмету и позволяет его редактировать
+        // в отдельном окне
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
             row.addEventListener('click', function(event) {
                 event.stopPropagation(); // предотвращаем всплытие
 
                 let contentInfo = `<span class="close-btn" style="font-size:30px;">×</span>
-                                  <h3>Информация о предмете</h3>`;
+                                  <h3>Информация о предмете</h3>
+                                  <form action="" method="POST">`;
 
                 for (let cell = 0; cell < headers.length; cell++) {
-                    if (row.cells[cell]) {                        
-                        contentInfo += `<div class="info-header">
-                                        <b>${headers[cell].textContent}:</b>
-                                        ${row.cells[cell].textContent}</div>`;
+                    if (row.cells[cell]) {
+                        contentInfo += `
+                            <div class="info-header">
+                                <label for="input-n${cell}">
+                                    <b>${headers[cell].textContent}:</b>
+                                </label>`;
+
+                        switch (headerTypes[cell]) {
+                            case 'int':
+                                contentInfo += `
+                                    <input type="number" class="input-info"
+                                           id="input-n${cell}"
+                                           value="${row.cells[cell].textContent.trim()}">`;
+                                break;
+                            case 'list_of_int':
+                            case 'str':
+                                contentInfo += `
+                                    <input type="text" class="input-info"
+                                           id="input-n${cell}"
+                                           value="${row.cells[cell].textContent.trim()}">`;
+                                break;
+                            case 'img':
+                                contentInfo += `
+                                    <input type="file" class="input-info"
+                                           id="input-n${cell}"
+                                           accept=".png,.jpg,.jpeg">`;
+                                break;
+                            case 'list_of_str':
+                                contentInfo += `<?php echo $selector_warehouse; ?>`;
+                                break;
+                        }
+
+                        contentInfo += `</div>`; // Закрываем .info-header
                     }
                 }
-                contentInfo += '<div class="d-flex justify-content-end">\
-                                <button type="button" class="btn btn-primary table-info-btn">Сохранить</button>\n\
-                                <button type="button" class="btn btn-danger table-info-btn">Удалить</button>\n\
-                                </div>';
+                contentInfo += infoBoxButtons;
+                contentInfo += "</form>";
 
                 infoBox.innerHTML = contentInfo;
                 infoBox.style.display = 'block';
